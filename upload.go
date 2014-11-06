@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
 	"os/exec"
 	"sort"
@@ -13,6 +14,10 @@ import (
 
 var bucket *s3.Bucket
 
+var bucketName = flag.String("bucket", "bitjester.co", "the name of the bucket to upload into")
+var prefix = flag.String("prefix", "diacam/", "a string with which to prefix names of uploads")
+var updateManifest = flag.Bool("update-manifest", false, "add uploaded file as an entry in ${prefix}MANIFEST.json")
+
 func init() {
 	auth, err := aws.EnvAuth()
 	if err != nil {
@@ -22,11 +27,13 @@ func init() {
 	region := aws.USEast
 
 	conn := s3.New(auth, region)
-	bucket = conn.Bucket("bitjester.co")
+	bucket = conn.Bucket(*bucketName)
 }
 
 func main() {
-	filename := time.Now().Format("diacam/2006-01-02T15:04:05-0700.jpg")
+	flag.Parse()
+	
+	filename := time.Now().Format(*prefix + "2006-01-02T15:04:05-0700.jpg")
 	capture := exec.Command("raspistill", "-o", "-")
 
 	image, err := capture.Output()
@@ -41,7 +48,9 @@ func main() {
 
 	log.Printf("uploaded %s\n", filename)
 
-	writeManifest()
+	if *updateManifest {
+		writeManifest()
+	}
 }
 
 func upload(filename string, contents []byte) (err error) {
@@ -50,7 +59,7 @@ func upload(filename string, contents []byte) (err error) {
 }
 
 func writeManifest() (err error) {
-	resp, err := bucket.List("diacam/2014", "", "diacam/2014", 1000)
+	resp, err := bucket.List(*prefix + "201", "", *prefix + "201", 1000)
 	if err != nil {
 		return
 	}
@@ -68,7 +77,7 @@ func writeManifest() (err error) {
 		return
 	}
 
-	bucket.Put("diacam/MANIFEST.json", json, "application/json", s3.PublicRead)
+	bucket.Put(*prefix + "MANIFEST.json", json, "application/json", s3.PublicRead)
 
 	return
 }
